@@ -8,7 +8,7 @@ const FaceRecognition = () => {
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentInProgress, setPaymentInProgress] = useState(false);
-  const [matchedSocials, setMatchedSocials] = useState(null); // 🌟 NEW
+  const [paymentHistory, setPaymentHistory] = useState([]);
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -43,17 +43,25 @@ const FaceRecognition = () => {
     localStorage.setItem('face-users', JSON.stringify(users));
   };
 
+  const persistHistory = (history) => {
+    localStorage.setItem('payment-history', JSON.stringify(history));
+  };
+
   useEffect(() => {
-    const saved = localStorage.getItem('face-users');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const converted = parsed.map(user => ({
+    const savedUsers = localStorage.getItem('face-users');
+    const savedHistory = localStorage.getItem('payment-history');
+
+    if (savedUsers) {
+      const parsedUsers = JSON.parse(savedUsers);
+      const converted = parsedUsers.map(user => ({
         walletAddress: user.walletAddress,
-        descriptor: new Float32Array(user.descriptor),
-        linkedin: user.linkedin || '', // 🌟 NEW
-        instagram: user.instagram || '', // 🌟 NEW
+        descriptor: new Float32Array(user.descriptor)
       }));
       setRegisteredUsers(converted);
+    }
+
+    if (savedHistory) {
+      setPaymentHistory(JSON.parse(savedHistory));
     }
   }, []);
 
@@ -83,15 +91,9 @@ const FaceRecognition = () => {
       return;
     }
 
-    // 🌟 NEW - Prompt for social links
-    const linkedin = prompt('Enter your LinkedIn URL (optional):') || '';
-    const instagram = prompt('Enter your Instagram URL (optional):') || '';
-
     const newUser = {
       walletAddress: walletAddress,
       descriptor: Array.from(detections.descriptor),
-      linkedin,
-      instagram,
     };
 
     const updatedUsers = [...registeredUsers, newUser];
@@ -128,18 +130,26 @@ const FaceRecognition = () => {
 
       if (distance < 0.45) {
         alert(`✅ Face recognized! Wallet: ${match.label}`);
-        setMatchedSocials({ linkedin: matchedUser.linkedin, instagram: matchedUser.instagram }); // 🌟 NEW
 
         const amount = prompt('Enter the amount to pay:');
         if (amount && !isNaN(amount) && parseFloat(amount) > 0) {
           setPaymentAmount(amount);
           setPaymentInProgress(true);
-          alert(`✅ Payment of ${amount} triggered for wallet: ${match.label}`);
+
+          const newHistory = [
+            ...paymentHistory,
+            { walletAddress: match.label, amount, timestamp: new Date().toLocaleString() },
+          ];
+
+          setPaymentHistory(newHistory);
+          persistHistory(newHistory);
+
+          alert(`✅ Payment of ${amount} ETH triggered for wallet: ${match.label}`);
         } else {
           alert('❌ Invalid amount entered.');
         }
       } else {
-        alert('❌ Face matched, but confidence is too low. Payment aborted.');
+        alert('❌ Face not recognized.');
       }
     } else {
       alert('❌ Face not recognized.');
@@ -181,45 +191,73 @@ const FaceRecognition = () => {
   }, []);
 
   return (
-    <div style={{ textAlign: 'center' }}>
-      <h2>👤 Register Your Face with Crypto Wallet</h2>
-      <button onClick={connectWallet} style={{ padding: '10px 20px' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh', padding: '20px', fontFamily: 'Arial', color: '#f0f0f0' }}>
+      {/* Animated Gradient Background */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #00ffcc)',
+        backgroundSize: '400% 400%',
+        animation: 'gradientBG 20s ease infinite',
+        zIndex: -2
+      }} />
+
+      {/* Floating Crypto Images */}
+      <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" style={floatingStyle(0)} />
+      <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" style={floatingStyle(1)} />
+      <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT" style={floatingStyle(2)} />
+
+      <style>{`
+        @keyframes gradientBG {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes float {
+          0% { transform: translateY(0); opacity: 0.8; }
+          50% { transform: translateY(-20px); opacity: 1; }
+          100% { transform: translateY(0); opacity: 0.8; }
+        }
+        button {
+          transition: all 0.3s ease;
+          cursor: pointer;
+        }
+        button:hover {
+          transform: scale(1.05);
+          opacity: 0.85;
+        }
+      `}</style>
+
+      <h2 style={{ color: '#00ffcc', marginBottom: '30px' }}>👤 Face + Crypto Wallet App</h2>
+
+      <button onClick={connectWallet} style={buttonStyle}>
         {walletAddress ? `Connected: ${walletAddress.slice(0, 6)}...` : 'Connect Wallet'}
-      </button>
-      <br />
-      <button onClick={registerFace} style={{ marginTop: '10px', padding: '10px 20px' }}>
-        Register Face
-      </button>
-      <button onClick={recognizeAndPay} style={{ marginTop: '10px', padding: '10px 20px', marginLeft: '10px' }}>
-        Recognize & Pay
-      </button>
-      <button onClick={clearRegisteredFaces} style={{ marginTop: '10px', padding: '10px 20px', marginLeft: '10px' }}>
-        Clear All Registered Faces
       </button>
 
       <div style={{ marginTop: '20px' }}>
-        <video ref={videoRef} width="720" height="560" autoPlay muted />
+        <button onClick={registerFace} style={buttonStyle}>Register Face</button>
+        <button onClick={recognizeAndPay} style={buttonStyle}>Recognize & Pay</button>
+        <button onClick={clearRegisteredFaces} style={{ ...buttonStyle, backgroundColor: '#ff4c4c' }}>Clear All Faces</button>
+      </div>
+
+      <div style={{ marginTop: '30px' }}>
+        <video ref={videoRef} width="720" height="560" autoPlay muted style={{ border: '2px solid #00ffcc', borderRadius: '10px' }} />
         <div ref={canvasRef} />
       </div>
 
       {paymentInProgress && (
-        <div style={{ marginTop: '20px' }}>
+        <div style={{ marginTop: '20px', color: '#00ffcc' }}>
           <h3>💰 Payment in Progress</h3>
           <p>Amount: {paymentAmount} ETH</p>
         </div>
       )}
 
-      {matchedSocials && ( // 🌟 NEW
-        <div style={{ marginTop: '20px' }}>
-          <h3>🔗 Social Links</h3>
-          {matchedSocials.linkedin && <p><a href={matchedSocials.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
-          {matchedSocials.instagram && <p><a href={matchedSocials.instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
-        </div>
-      )}
-
       {registeredUsers.length > 0 && (
-        <div style={{ marginTop: '20px' }}>
-          <h3>👥 Registered Users (Wallets):</h3>
+        <div style={{ marginTop: '30px' }}>
+          <h3>👥 Registered Users</h3>
           <ul>
             {registeredUsers.map((user, index) => (
               <li key={index}>{user.walletAddress}</li>
@@ -227,8 +265,63 @@ const FaceRecognition = () => {
           </ul>
         </div>
       )}
+
+      {paymentHistory.length > 0 && (
+        <div style={{ marginTop: '30px' }}>
+          <h3>📜 Payment History</h3>
+          <table style={{ margin: '0 auto', width: '90%', borderCollapse: 'collapse', backgroundColor: '#1e1e1e' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #00ffcc' }}>
+                <th style={tableHeader}>Wallet</th>
+                <th style={tableHeader}>Amount (ETH)</th>
+                <th style={tableHeader}>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentHistory.map((payment, index) => (
+                <tr key={index} style={{ borderBottom: '1px solid #333' }}>
+                  <td style={tableCell}>{payment.walletAddress}</td>
+                  <td style={tableCell}>{payment.amount}</td>
+                  <td style={tableCell}>{payment.timestamp}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
+
+// Reusable styles
+const buttonStyle = {
+  margin: '10px',
+  padding: '10px 20px',
+  backgroundColor: '#333',
+  color: '#fff',
+  border: '1px solid #555',
+  borderRadius: '5px'
+};
+
+const tableHeader = {
+  padding: '10px',
+  color: '#00ffcc'
+};
+
+const tableCell = {
+  padding: '10px',
+  color: '#f0f0f0'
+};
+
+// Floating image style generator
+const floatingStyle = (index) => ({
+  position: 'absolute',
+  top: `${20 + index * 10}%`,
+  left: `${10 + index * 30}%`,
+  width: '50px',
+  animation: `float ${4 + index}s ease-in-out infinite`,
+  zIndex: -1,
+  opacity: 0.7
+});
 
 export default FaceRecognition;

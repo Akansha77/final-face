@@ -6,8 +6,10 @@ const FaceRecognition = () => {
   const canvasRef = useRef();
   const [walletAddress, setWalletAddress] = useState('');
   const [registeredUsers, setRegisteredUsers] = useState([]);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentInProgress, setPaymentInProgress] = useState(false);
+  const [matchedSocials, setMatchedSocials] = useState(null); // 🌟 NEW
 
-  // Connect to MetaMask wallet
   const connectWallet = async () => {
     if (window.ethereum) {
       try {
@@ -23,7 +25,6 @@ const FaceRecognition = () => {
     }
   };
 
-  // Start webcam
   const startVideo = () => {
     navigator.mediaDevices
       .getUserMedia({ video: {} })
@@ -31,7 +32,6 @@ const FaceRecognition = () => {
       .catch((err) => console.error('Error accessing webcam:', err));
   };
 
-  // Load face-api models
   const loadModels = async () => {
     const MODEL_URL = '/models';
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
@@ -49,7 +49,9 @@ const FaceRecognition = () => {
       const parsed = JSON.parse(saved);
       const converted = parsed.map(user => ({
         walletAddress: user.walletAddress,
-        descriptor: new Float32Array(user.descriptor)
+        descriptor: new Float32Array(user.descriptor),
+        linkedin: user.linkedin || '', // 🌟 NEW
+        instagram: user.instagram || '', // 🌟 NEW
       }));
       setRegisteredUsers(converted);
     }
@@ -81,9 +83,15 @@ const FaceRecognition = () => {
       return;
     }
 
+    // 🌟 NEW - Prompt for social links
+    const linkedin = prompt('Enter your LinkedIn URL (optional):') || '';
+    const instagram = prompt('Enter your Instagram URL (optional):') || '';
+
     const newUser = {
       walletAddress: walletAddress,
       descriptor: Array.from(detections.descriptor),
+      linkedin,
+      instagram,
     };
 
     const updatedUsers = [...registeredUsers, newUser];
@@ -115,7 +123,24 @@ const FaceRecognition = () => {
     const match = faceMatcher.findBestMatch(detection.descriptor);
 
     if (match.label !== 'unknown') {
-      alert(`✅ Payment triggered for wallet: ${match.label}`);
+      const matchedUser = registeredUsers.find(user => user.walletAddress === match.label);
+      const distance = faceapi.euclideanDistance(matchedUser.descriptor, detection.descriptor);
+
+      if (distance < 0.45) {
+        alert(`✅ Face recognized! Wallet: ${match.label}`);
+        setMatchedSocials({ linkedin: matchedUser.linkedin, instagram: matchedUser.instagram }); // 🌟 NEW
+
+        const amount = prompt('Enter the amount to pay:');
+        if (amount && !isNaN(amount) && parseFloat(amount) > 0) {
+          setPaymentAmount(amount);
+          setPaymentInProgress(true);
+          alert(`✅ Payment of ${amount} triggered for wallet: ${match.label}`);
+        } else {
+          alert('❌ Invalid amount entered.');
+        }
+      } else {
+        alert('❌ Face matched, but confidence is too low. Payment aborted.');
+      }
     } else {
       alert('❌ Face not recognized.');
     }
@@ -176,6 +201,21 @@ const FaceRecognition = () => {
         <video ref={videoRef} width="720" height="560" autoPlay muted />
         <div ref={canvasRef} />
       </div>
+
+      {paymentInProgress && (
+        <div style={{ marginTop: '20px' }}>
+          <h3>💰 Payment in Progress</h3>
+          <p>Amount: {paymentAmount} ETH</p>
+        </div>
+      )}
+
+      {matchedSocials && ( // 🌟 NEW
+        <div style={{ marginTop: '20px' }}>
+          <h3>🔗 Social Links</h3>
+          {matchedSocials.linkedin && <p><a href={matchedSocials.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
+          {matchedSocials.instagram && <p><a href={matchedSocials.instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
+        </div>
+      )}
 
       {registeredUsers.length > 0 && (
         <div style={{ marginTop: '20px' }}>

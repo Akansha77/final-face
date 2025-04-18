@@ -38,7 +38,7 @@ function App() {
         marginBottom: '30px',
         animation: 'fadeIn 1.5s ease-in-out'
       }}>
-        FacePay: Scan Your Face to Pay
+        FaceX:  Pay Anyone, Just with a Face
       </h2>
 
       {/* Face Recognition Component */}
